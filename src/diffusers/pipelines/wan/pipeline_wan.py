@@ -145,7 +145,7 @@ class WanPipeline(DiffusionPipeline, WanLoraLoaderMixin):
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
-        device = device or self._execution_device
+        device = torch.device("cpu")
         dtype = dtype or self.text_encoder.dtype
 
         prompt = [prompt] if isinstance(prompt, str) else prompt
@@ -415,7 +415,7 @@ class WanPipeline(DiffusionPipeline, WanLoraLoaderMixin):
             prompt_embeds (`torch.Tensor`, *optional*):
                 Pre-generated text embeddings. Can be used to easily tweak text inputs (prompt weighting). If not
                 provided, text embeddings are generated from the `prompt` input argument.
-            output_type (`str`, *optional*, defaults to `"pil"`):
+            output_type (`str`, *optional*, defaults to `"np"`):
                 The output format of the generated image. Choose between `PIL.Image` or `np.array`.
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether or not to return a [`WanPipelineOutput`] instead of a plain tuple.
@@ -465,6 +465,9 @@ class WanPipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
         device = self._execution_device
 
+        transformer_dtype = torch.float16
+        self.transformer.to(transformer_dtype)
+
         # 2. Define call parameters
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -485,10 +488,9 @@ class WanPipeline(DiffusionPipeline, WanLoraLoaderMixin):
             device=device,
         )
 
-        transformer_dtype = self.transformer.dtype
-        prompt_embeds = prompt_embeds.to(transformer_dtype)
+        prompt_embeds = prompt_embeds.to(transformer_dtype) # No change here, just for completeness
         if negative_prompt_embeds is not None:
-            negative_prompt_embeds = negative_prompt_embeds.to(transformer_dtype)
+            negative_prompt_embeds = negative_prompt_embeds.to(transformer_dtype) # No change here, just for completeness
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -519,7 +521,7 @@ class WanPipeline(DiffusionPipeline, WanLoraLoaderMixin):
 
                 self._current_timestep = t
                 latent_model_input = latents.to(transformer_dtype)
-                timestep = t.expand(latents.shape[0])
+                timestep = t.expand(latents.shape[0]).to(transformer_dtype)
 
                 noise_pred = self.transformer(
                     hidden_states=latent_model_input,
